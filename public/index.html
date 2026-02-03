@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArbitrageX - Live Odds Scanner</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .brand-font { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .arbitrage-card {
+            animation: slideIn 0.5s ease-out;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.5);
+        }
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .live-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .bookmaker-parimatch { border-left: 3px solid #f59e0b; }
+        .bookmaker-1xbet { border-left: 3px solid #3b82f6; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+    <!-- Background -->
+    <div class="fixed inset-0 z-0 pointer-events-none">
+        <div class="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="relative z-10 border-b border-white/10 bg-slate-950/50 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white">A</div>
+                    <span class="brand-font text-xl font-bold tracking-tight">Arbitrage<span class="text-purple-400">X</span></span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 text-sm text-slate-400">
+                        <span class="w-2 h-2 bg-green-500 rounded-full live-dot"></span>
+                        <span id="connection-status">Connecting...</span>
+                    </div>
+                    <span id="last-update" class="text-xs text-slate-500">Never</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        <!-- Stats Header -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="glass-panel rounded-2xl p-4">
+                <div class="text-slate-400 text-xs uppercase tracking-wider mb-1">Total Matches</div>
+                <div id="stat-total" class="text-3xl font-bold brand-font">0</div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4">
+                <div class="text-slate-400 text-xs uppercase tracking-wider mb-1">Bookmakers</div>
+                <div class="text-3xl font-bold brand-font">2</div>
+                <div class="text-xs text-slate-500 mt-1">Parimatch + 1xBet</div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4 border-green-500/30 bg-green-500/5">
+                <div class="text-green-400 text-xs uppercase tracking-wider mb-1">Arbitrage Opportunities</div>
+                <div id="stat-arbitrage" class="text-3xl font-bold brand-font text-green-400">0</div>
+            </div>
+            <div class="glass-panel rounded-2xl p-4">
+                <div class="text-slate-400 text-xs uppercase tracking-wider mb-1">Best Profit</div>
+                <div id="stat-profit" class="text-3xl font-bold brand-font text-purple-400">0%</div>
+            </div>
+        </div>
+
+        <!-- Arbitrage Alerts -->
+        <div id="arbitrage-alerts" class="space-y-4">
+            <!-- Dynamic content -->
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid lg:grid-cols-3 gap-8">
+            
+            <!-- All Odds Table -->
+            <div class="lg:col-span-2 glass-panel rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold brand-font flex items-center gap-2">
+                        <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        Live Odds Feed
+                    </h2>
+                    <button onclick="triggerScrape()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        Refresh Now
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="border-b border-white/10 text-xs uppercase tracking-wider text-slate-400">
+                                <th class="pb-3 pl-4">Match</th>
+                                <th class="pb-3">League</th>
+                                <th class="pb-3">Bookmaker</th>
+                                <th class="pb-3">Home</th>
+                                <th class="pb-3">Away</th>
+                                <th class="pb-3 pr-4">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="odds-table-body" class="text-sm divide-y divide-white/5">
+                            <tr>
+                                <td colspan="6" class="py-12 text-center text-slate-500">
+                                    Waiting for data...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Calculator Panel -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-xl font-bold brand-font mb-6 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    Quick Calculator
+                </h2>
+                
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-slate-400 mb-1 block">Bookmaker A Odds</label>
+                            <input type="number" step="0.01" id="calc-odds-a" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" oninput="calculateQuick()">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 mb-1 block">Bookmaker B Odds</label>
+                            <input type="number" step="0.01" id="calc-odds-b" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" oninput="calculateQuick()">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block">Total Stake (₹)</label>
+                        <input type="number" id="calc-stake" value="10000" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" oninput="calculateQuick()">
+                    </div>
+
+                    <div id="calc-result" class="rounded-xl p-4 border border-slate-700 bg-slate-900/30">
+                        <p class="text-slate-400 text-sm text-center">Enter odds to calculate</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // WebSocket Connection
+        const socket = io();
+        let currentOdds = [];
+        let arbitrageHistory = [];
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            document.getElementById('connection-status').textContent = 'Live';
+            document.getElementById('connection-status').className = 'text-green-400';
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            document.getElementById('connection-status').className = 'text-red-400';
+        });
+
+        // Initial data load
+        socket.on('initial_data', (data) => {
+            updateDisplay(data.odds, data.arbitrage);
+        });
+
+        // Real-time updates
+        socket.on('odds_update', (data) => {
+            console.log('Received update:', data);
+            currentOdds = data.data;
+            updateDisplay(data.data, data.arbitrage);
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+        });
+
+        // Arbitrage alerts
+        socket.on('arbitrage_alert', (opportunities) => {
+            showArbitrageAlert(opportunities);
+        });
+
+        function updateDisplay(odds, arbitrage) {
+            // Update stats
+            document.getElementById('stat-total').textContent = odds.length;
+            document.getElementById('stat-arbitrage').textContent = arbitrage.length;
+            
+            if (arbitrage.length > 0) {
+                const bestProfit = Math.max(...arbitrage.map(a => parseFloat(a.profitPercent)));
+                document.getElementById('stat-profit').textContent = bestProfit.toFixed(2) + '%';
+            }
+
+            // Update table
+            const tbody = document.getElementById('odds-table-body');
+            if (odds.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-slate-500">Waiting for data...</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = odds.map(match => `
+                <tr class="hover:bg-white/5 transition-colors bookmaker-${match.bookmaker}">
+                    <td class="py-3 pl-4 font-medium text-white">${match.event}</td>
+                    <td class="py-3 text-slate-400 text-xs">${match.league || 'N/A'}</td>
+                    <td class="py-3">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${
+                            match.bookmaker === 'parimatch' 
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                                : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        } uppercase">${match.bookmaker}</span>
+                    </td>
+                    <td class="py-3 font-mono text-green-400">${match.odds.home?.toFixed(2) || '-'}</td>
+                    <td class="py-3 font-mono text-blue-400">${match.odds.away?.toFixed(2) || '-'}</td>
+                    <td class="py-3 pr-4 text-slate-500 text-xs">${match.time || 'N/A'}</td>
+                </tr>
+            `).join('');
+
+            // Update arbitrage section
+            updateArbitrageDisplay(arbitrage);
+        }
+
+        function updateArbitrageDisplay(arbitrage) {
+            const container = document.getElementById('arbitrage-alerts');
+            
+            if (arbitrage.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = arbitrage.map(opp => `
+                <div class="arbitrage-card rounded-xl p-4 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-2xl">🚨</div>
+                        <div>
+                            <div class="text-white font-bold">${opp.event}</div>
+                            <div class="text-sm text-green-400 flex items-center gap-2">
+                                <span>Profit: ${opp.profitPercent}%</span>
+                                <span class="text-slate-400">|</span>
+                                <span class="text-slate-400">₹${opp.stakes.profit} on ₹${opp.stakes.total}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 text-right">
+                        <div class="bg-slate-900/50 rounded-lg p-2 min-w-[80px]">
+                            <div class="text-xs text-slate-400">${opp.sources.home.bookmaker}</div>
+                            <div class="text-green-400 font-bold">${opp.sources.home.odds}</div>
+                            <div class="text-xs text-slate-500">₹${opp.stakes.a}</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-2 min-w-[80px]">
+                            <div class="text-xs text-slate-400">${opp.sources.away.bookmaker}</div>
+                            <div class="text-blue-400 font-bold">${opp.sources.away.odds}</div>
+                            <div class="text-xs text-slate-500">₹${opp.stakes.b}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showArbitrageAlert(opportunities) {
+            // Browser notification if allowed
+            if (Notification.permission === "granted") {
+                opportunities.forEach(opp => {
+                    new Notification("🚨 Arbitrage Found!", {
+                        body: `${opp.event}: ${opp.profitPercent}% profit`,
+                        icon: '/favicon.ico'
+                    });
+                });
+            }
+        }
+
+        function triggerScrape() {
+            fetch('/api/scrape')
+                .then(r => r.json())
+                .then(data => console.log('Manual scrape triggered:', data));
+        }
+
+        // Quick Calculator
+        function calculateQuick() {
+            const oddsA = parseFloat(document.getElementById('calc-odds-a').value);
+            const oddsB = parseFloat(document.getElementById('calc-odds-b').value);
+            const stake = parseFloat(document.getElementById('calc-stake').value) || 10000;
+            
+            const resultDiv = document.getElementById('calc-result');
+            
+            if (!oddsA || !oddsB || oddsA <= 1 || oddsB <= 1) {
+                resultDiv.innerHTML = '<p class="text-slate-400 text-sm text-center">Enter valid odds (>1.00)</p>';
+                return;
+            }
+
+            const margin = (1/oddsA + 1/oddsB) * 100;
+            const isArbitrage = margin < 100;
+            
+            const total = (1/oddsA) + (1/oddsB);
+            const stakeA = (stake * (1/oddsA)) / total;
+            const stakeB = stake - stakeA;
+            const profit = (stakeA * oddsA) - stake;
+            const profitPercent = ((profit/stake) * 100).toFixed(2);
+
+            if (isArbitrage) {
+                resultDiv.className = 'rounded-xl p-4 border bg-green-500/10 border-green-500/50 profit-glow';
+                resultDiv.innerHTML = `
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-green-400 font-bold">✓ ARBITRAGE FOUND</span>
+                        <span class="text-2xl font-bold text-green-400">${profitPercent}%</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm mb-2">
+                        <div class="bg-slate-900/50 rounded p-2">
+                            <div class="text-slate-400 text-xs">Bet A</div>
+                            <div class="text-white font-bold">₹${Math.round(stakeA)}</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded p-2">
+                            <div class="text-slate-400 text-xs">Bet B</div>
+                            <div class="text-white font-bold">₹${Math.round(stakeB)}</div>
+                        </div>
+                    </div>
+                    <div class="text-center text-green-400 font-bold border-t border-green-500/30 pt-2">
+                        Profit: ₹${Math.round(profit)}
+                    </div>
+                `;
+            } else {
+                resultDiv.className = 'rounded-xl p-4 border bg-red-500/10 border-red-500/50';
+                resultDiv.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="text-red-400 font-bold">✗ No Arbitrage</span>
+                        <span class="text-lg font-bold text-red-400">${margin.toFixed(2)}%</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-2">Market margin exceeds 100%. Bookmaker holds edge.</p>
+                `;
+            }
+        }
+
+        // Request notification permission
+        if ("Notification" in window) {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html>

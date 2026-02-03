@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  scraper-server:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - REDIS_HOST=redis
+      - PROXY_SERVER=${PROXY_SERVER}
+      - PROXY_USER=${PROXY_USER}
+      - PROXY_PASS=${PROXY_PASS}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    # Allocate more memory for Chromium
+    shm_size: '2gb'
+
+volumes:
+  redis_data:
